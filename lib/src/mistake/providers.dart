@@ -2,7 +2,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:smart_wrong_notebook/src/mistake/ai/ai_actions.dart';
 import 'package:smart_wrong_notebook/src/mistake/ai/ai_chat_client.dart';
 import 'package:smart_wrong_notebook/src/mistake/ai/ai_settings.dart';
+import 'package:smart_wrong_notebook/src/mistake/cleaning/cleaning_service.dart';
 import 'package:smart_wrong_notebook/src/mistake/db/mistake_database.dart';
+import 'package:smart_wrong_notebook/src/mistake/print/pdf_print_service.dart';
 import 'package:smart_wrong_notebook/src/mistake/services/image_quality.dart';
 import 'package:smart_wrong_notebook/src/mistake/storage/mistake_image_store.dart';
 
@@ -30,6 +32,17 @@ final Provider<AiActions> aiActionsProvider = Provider<AiActions>((ref) {
     settings: ref.read(aiSettingsStoreProvider),
   );
 });
+
+final Provider<CleaningService> cleaningServiceProvider =
+    Provider<CleaningService>((ref) {
+  return CleaningService(
+    db: ref.read(mistakeDbProvider),
+    store: ref.read(mistakeImageStoreProvider),
+  );
+});
+
+final Provider<PdfPrintService> pdfPrintServiceProvider =
+    Provider<PdfPrintService>((ref) => PdfPrintService());
 
 /// 所有试卷，按最近更新排序。
 final watchPapersProvider =
@@ -60,3 +73,28 @@ final pageByIdProvider = StreamProvider.family<PageRecord?, int>(
 
 final questionByIdProvider = StreamProvider.family<Question?, int>(
     (ref, id) => ref.watch(mistakeDbProvider).watchQuestion(id));
+
+final watchUnderstandingProvider =
+    StreamProvider.family<AiUnderstanding?, int>(
+        (ref, id) => ref.watch(mistakeDbProvider).watchUnderstanding(id));
+
+final watchMistakeProvider = StreamProvider.family<AiMistake?, int>(
+    (ref, id) => ref.watch(mistakeDbProvider).watchMistake(id));
+
+final watchGeneratedOfQuestionProvider =
+    StreamProvider.family<List<GeneratedExercise>, int>((ref, questionId) {
+  return ref
+      .watch(mistakeDbProvider)
+      .watchGeneratedOfQuestion(questionId);
+});
+
+final watchBlockVersionsProvider =
+    StreamProvider.family<List<BlockVersion>, int>((ref, blockId) {
+  return ref.watch(mistakeDbProvider).watchBlockVersions(blockId);
+});
+
+final watchBlockByIdProvider = StreamProvider.family<Block?, int>(
+    (ref, id) => ref.watch(mistakeDbProvider).watchBlock(id));
+
+final watchPrintItemsProvider = StreamProvider<List<PrintItem>>(
+    (ref) => ref.watch(mistakeDbProvider).watchPrintItems());

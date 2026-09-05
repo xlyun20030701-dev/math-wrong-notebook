@@ -256,6 +256,17 @@ class MistakeDatabase extends _$MistakeDatabase {
   Future<Block?> blockById(int blockId) =>
       (select(blocks)..where((t) => t.id.equals(blockId))).getSingleOrNull();
 
+  Stream<Block?> watchBlock(int blockId) =>
+      (select(blocks)..where((t) => t.id.equals(blockId))).watchSingleOrNull();
+
+  Future<void> updateBlockType(int blockId, String blockType) {
+    if (!kBlockTypes.contains(blockType)) {
+      throw ArgumentError.value(blockType, 'blockType', '未知的区块类型');
+    }
+    return (update(blocks)..where((t) => t.id.equals(blockId)))
+        .write(BlocksCompanion(blockType: Value(blockType)));
+  }
+
   Future<int> insertBlock({
     required int questionId,
     required int pageId,
