@@ -51,6 +51,19 @@ void main() {
     await store.deleteImage(cropPath);
     expect(await File(cropPath).exists(), isFalse);
 
+    // 防御：过小选区抛错，绝不悄悄生成 1px 图片。
+    await expectLater(
+      store.cropBlock(paperId, originalPath,
+          x: 0.5, y: 0.5, width: 0.001, height: 0.2),
+      throwsArgumentError,
+    );
+    // 防御：越界选区抛错。
+    await expectLater(
+      store.cropBlock(paperId, originalPath,
+          x: 0.6, y: 0.1, width: 0.5, height: 0.5),
+      throwsArgumentError,
+    );
+
     await store.deletePaperDirectory(paperId);
     expect(await Directory('${base.path}/math_wrong_notebook/papers/7').exists(),
         isFalse);

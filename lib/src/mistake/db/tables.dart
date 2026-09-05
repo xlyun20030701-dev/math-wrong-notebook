@@ -32,6 +32,10 @@ class Pages extends Table {
   RealColumn get blurScore => real().nullable()();
   /// 曝光分 0~100。
   RealColumn get exposureScore => real().nullable()();
+  /// 透视/倾斜警示。
+  ///
+  /// 说明：Phase 1 尚未实现透视/倾斜检测，本字段恒为 false（“尚未检测”），
+  /// 不得被当作“已检测且无倾斜”来宣传。真正的几何透视检测在 Phase 2 实现。
   BoolColumn get perspectiveWarning =>
       boolean().withDefault(const Constant(false))();
   DateTimeColumn get createdAt =>
@@ -115,6 +119,13 @@ const List<String> kBlockTypes = <String>[
   'teacherNote',
   'other',
 ];
+
+/// Block 处理状态。Phase 2 引入真正的图像处理后才会写入 processed。
+const Set<String> kBlockProcessingStatuses = <String>{
+  'none',
+  'cropped',
+  'processed',
+};
 
 const List<String> kAnswerSourceTypes = <String>[
   'originalPaper',

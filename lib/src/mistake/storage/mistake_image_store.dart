@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'package:smart_wrong_notebook/src/mistake/services/block_geometry.dart';
 import 'package:uuid/uuid.dart';
 
 /// 本地图片文件存储。
@@ -13,6 +14,10 @@ import 'package:uuid/uuid.dart';
 ///   <doc>/math_wrong_notebook/papers/<paperId>/blocks/<uuid>.jpg
 ///
 /// 原图永不修改；裁剪产物写入独立文件。
+///
+/// TODO(phase2): 把 [decodeBaked]/[cropBaked] 的大图解码与像素处理迁移到
+/// 后台 isolate（compute/Isolate.run），并加入“按页面一次解码、多次裁剪”
+/// 的内存缓存，避免在 UI isolate 上反复整图解码。
 class MistakeImageStore {
   const MistakeImageStore({this.baseDir});
 
@@ -45,7 +50,20 @@ class MistakeImageStore {
     return dest;
   }
 
-  /// 依据归一化矩形把原始照片裁剪为独立 jpg（不修改原图）。
+  /// 解码并应用 EXIF 方向后的整页图（不修改磁盘上的原图）。
+  Future<img.Image> decodeBaked(String originalPath) async {
+    final bytes = await File(originalPath).readAsBytes();
+    final decoded = img.decodeImage(bytes);
+    if (decoded == null) {
+      throw StateError('无法解码图片: $originalPath');
+    }
+    return img.bakeOrientation(decoded);
+  }
+
+  /// 依据归一化矩形把整页图裁剪为独立 jpg（不修改原图）。
+  ///
+  /// 每次调用会做一次完整解码；同一页面连续框选时建议先 [decodeBaked] 一次，
+  /// 再调用 [cropBaked] 复用已解码图像，避免重复整图解码。
   Future<String> cropBlock(
     int paperId,
     String originalPath, {
@@ -54,33 +72,79 @@ class MistakeImageStore {
     required double width,
     required double height,
   }) async {
+    final baked = await decodeBaked(originalPath);
+    return cropBaked(paperId, baked,
+        x: x, y: y, width: width, height: height);
+  }
+
+  /// 用已解码（已应用方向）的图像裁剪出区块。
+  ///
+  /// 与 [cropBlock] 相同的归一化语义，但不会重复解码整图。
+  Future<String> cropBaked(
+    int paperId,
+    img.Image baked, {
+    required double x,
+    required double y,
+    required double width,
+    required double height,
+  }) async {
+    final iw = baked.width;
+    final ih = baked.height;
+    if (iw <= 0 || ih <= 0) {
+      throw ArgumentError('无效图片尺寸: ${iw}x$ih');
+    }
+    final r = _clampNormalized(x, y, width, height, iw, ih);
+    final crop = img.copyCrop(
+      baked,
+      x: r.$1,
+      y: r.$2,
+      width: r.$3,
+      height: r.$4,
+    );
+    final jpg = img.encodeJpg(crop, quality: 92);
     final dir = await _paperDirectory(paperId);
     final blocks = Directory(p.join(dir.path, 'blocks'));
     await blocks.create(recursive: true);
     final dest = p.join(blocks.path, '${const Uuid().v4()}.jpg');
-
-    final bytes = await File(originalPath).readAsBytes();
-    final decoded = img.decodeImage(bytes);
-    if (decoded == null) {
-      throw StateError('无法解码图片: $originalPath');
-    }
-    final baked = img.bakeOrientation(decoded);
-    final iw = baked.width;
-    final ih = baked.height;
-    final sx = math.max(0.0, math.min(1.0, x));
-    final sy = math.max(0.0, math.min(1.0, y));
-    final sw = math.max(0.0, math.min(1.0 - sx, width));
-    final sh = math.max(0.0, math.min(1.0 - sy, height));
-    final crop = img.copyCrop(
-      baked,
-      x: (sx * iw).floor().clamp(0, iw - 1),
-      y: (sy * ih).floor().clamp(0, ih - 1),
-      width: math.max(1, (sw * iw).round()),
-      height: math.max(1, (sh * ih).round()),
-    );
-    final jpg = img.encodeJpg(crop, quality: 92);
     await File(dest).writeAsBytes(jpg, flush: true);
     return dest;
+  }
+
+  /// 校验并计算裁剪像素矩形。
+  ///
+  /// 抛 [ArgumentError]（而不是悄悄生成 1px 图片）当且仅当：
+  /// - 归一化坐标越界；
+  /// - 选区为退化的零面积；
+  /// - 裁剪出的实际像素边长小于 [kMinBlockCropPixels]。
+  (int, int, int, int) _clampNormalized(
+      double x, double y, double width, double height, int iw, int ih) {
+    if (x.isNaN ||
+        y.isNaN ||
+        width.isNaN ||
+        height.isNaN ||
+        width <= 0 ||
+        height <= 0) {
+      throw ArgumentError('无效的选区坐标');
+    }
+    if (x < -1e-6 || y < -1e-6 || x + width > 1.0 + 1e-6 || y + height > 1.0 + 1e-6) {
+      throw ArgumentError('选区超出图片范围，请重新框选');
+    }
+    final cx = (x * iw).floor().clamp(0, iw - 1);
+    final cy = (y * ih).floor().clamp(0, ih - 1);
+    final cw = (width * iw).round();
+    final ch = (height * ih).round();
+    if (cw < kMinBlockCropPixels || ch < kMinBlockCropPixels) {
+      throw ArgumentError(
+        '选区过小（约 ${cw}x$ch 像素），打印会不清晰，请重新框选',
+      );
+    }
+    // 裁到图片边界以内，防止浮点误差造成越界。
+    final actualW = math.min(cw, iw - cx);
+    final actualH = math.min(ch, ih - cy);
+    if (actualW < kMinBlockCropPixels || actualH < kMinBlockCropPixels) {
+      throw ArgumentError('选区过小，请重新框选');
+    }
+    return (cx, cy, actualW, actualH);
   }
 
   Future<void> deleteImage(String? imagePath) async {

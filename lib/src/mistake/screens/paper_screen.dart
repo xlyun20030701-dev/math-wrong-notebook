@@ -182,13 +182,13 @@ class _PaperScreenState extends ConsumerState<PaperScreen> {
       child: Row(
         children: <Widget>[
           OutlinedButton.icon(
-            onPressed: () => _pickPages(ImageSource.camera, pages.length),
+            onPressed: () => _pickPages(ImageSource.camera),
             icon: const Icon(CupertinoIcons.camera),
             label: const Text('拍照'),
           ),
           const SizedBox(width: 8),
           OutlinedButton.icon(
-            onPressed: () => _pickPages(ImageSource.gallery, pages.length),
+            onPressed: () => _pickPages(ImageSource.gallery),
             icon: const Icon(CupertinoIcons.photo),
             label: const Text('相册'),
           ),
@@ -259,7 +259,7 @@ class _PaperScreenState extends ConsumerState<PaperScreen> {
     context.push('/pages/${page.id}/select', extra: widget.paperId);
   }
 
-  Future<void> _pickPages(ImageSource source, int startIndex) async {
+  Future<void> _pickPages(ImageSource source) async {
     try {
       final List<XFile> files = <XFile>[];
       if (source == ImageSource.camera) {
@@ -272,7 +272,7 @@ class _PaperScreenState extends ConsumerState<PaperScreen> {
         files.addAll(picked);
       }
       if (files.isEmpty) return;
-      await _processImages(source, files, startIndex);
+      await _processImages(source, files);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
@@ -281,11 +281,12 @@ class _PaperScreenState extends ConsumerState<PaperScreen> {
   }
 
   Future<void> _processImages(
-      ImageSource source, List<XFile> files, int startIndex) async {
+      ImageSource source, List<XFile> files) async {
     final db = ref.read(mistakeDbProvider);
     final store = ref.read(mistakeImageStoreProvider);
     final quality = ref.read(imageQualityProvider);
-    var index = startIndex;
+    // 基于当前最大 pageIndex + 1 起算，避免删除页后出现重复序号。
+    var nextIndex = await db.nextPageIndex(widget.paperId);
     var i = 0;
     while (i < files.length) {
       final file = files[i];
@@ -304,8 +305,8 @@ class _PaperScreenState extends ConsumerState<PaperScreen> {
         );
       }
       if (report.isGood || !mounted) {
-        await _insertPage(db, copied, index, report);
-        index++;
+        await _insertPage(db, copied, nextIndex, report);
+        nextIndex++;
         i++;
         continue;
       }
@@ -331,22 +332,23 @@ class _PaperScreenState extends ConsumerState<PaperScreen> {
           ],
         ),
       );
-      switch (action) {
-        case 'keep':
-          await _insertPage(db, copied, index, report);
-          index++;
-          i++;
-        case 'replace':
-          final XFile? f = await _picker.pickImage(source: source, maxWidth: 4096);
-          if (f == null) {
-            await store.deleteImage(copied);
-            i++;
-          } else {
-            files[i] = f;
-          }
-        default:
+      if (action == 'keep') {
+        await _insertPage(db, copied, nextIndex, report);
+        nextIndex++;
+        i++;
+      } else if (action == 'replace') {
+        final XFile? f =
+            await _picker.pickImage(source: source, maxWidth: 4096);
+        if (f == null) {
           await store.deleteImage(copied);
           i++;
+        } else {
+          files[i] = f;
+          await store.deleteImage(copied);
+        }
+      } else {
+        await store.deleteImage(copied);
+        i++;
       }
     }
     if (!mounted) return;
@@ -362,13 +364,13 @@ class _PaperScreenState extends ConsumerState<PaperScreen> {
   Future<void> _insertPage(
     MistakeDatabase db,
     String copied,
-    int index,
+    int pageNumber,
     ImageQualityReport report,
   ) async {
     await db.insertPage(
       paperId: widget.paperId,
       originalImagePath: copied,
-      pageIndex: index + 1,
+      pageIndex: pageNumber,
       width: report.width == 0 ? null : report.width,
       height: report.height == 0 ? null : report.height,
       qualityScore: report.qualityScore,

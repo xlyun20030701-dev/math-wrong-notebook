@@ -49,6 +49,13 @@ class ImageQualityReport {
 }
 
 /// 使用传统图像指标做图片质量门禁。
+///
+/// 只做确定性统计指标，不使用任何 AI/OCR 模型。
+/// 注意：本模块目前【不】检测透视/倾斜，[ImageQualityReport] 也没有
+/// perspectiveWarning 输出——调用方不得据此伪造已检测结果。
+///
+/// TODO(phase2): 大图解码与像素统计迁移到后台 isolate，避免阻塞 UI isolate；
+/// 并加入真实透视/倾斜几何检测后，再在 UI 上展示对应警示。
 class MistakeImageQuality {
   const MistakeImageQuality();
 

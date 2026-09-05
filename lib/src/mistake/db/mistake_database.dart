@@ -100,6 +100,8 @@ class MistakeDatabase extends _$MistakeDatabase {
   Stream<PageRecord?> watchPage(int id) =>
       (select(pages)..where((t) => t.id.equals(id))).watchSingleOrNull();
 
+  // 注意：Phase 1 未实现透视/倾斜检测，[perspectiveWarning] 恒为 false
+  // （含义是“尚未检测”，而非“已检测且无倾斜”）。
   Future<int> insertPage({
     required int paperId,
     required String originalImagePath,
@@ -125,6 +127,44 @@ class MistakeDatabase extends _$MistakeDatabase {
 
   Future<void> deletePage(int pageId) =>
       (delete(pages)..where((t) => t.id.equals(pageId))).go();
+
+  /// 删除某一页后自动把同一试卷的 pageIndex 重排为 1..n，避免跳号/重复。
+  Future<void> deletePageAndResequence(int pageId) async {
+    final page = await pageById(pageId);
+    if (page == null) return;
+    await (delete(pages)..where((t) => t.id.equals(pageId))).go();
+    await resequencePageIndexes(page.paperId);
+  }
+
+  /// 按 pageIndex（其次 createdAt）把某试卷页面重排为连续 1..n。
+  Future<void> resequencePageIndexes(int paperId) async {
+    final rows = await (select(pages)
+          ..where((t) => t.paperId.equals(paperId))
+          ..orderBy([
+            (t) => OrderingTerm.asc(t.pageIndex),
+            (t) => OrderingTerm.asc(t.createdAt),
+          ]))
+        .get();
+    await transaction(() async {
+      for (var i = 0; i < rows.length; i++) {
+        if (rows[i].pageIndex != i + 1) {
+          await (update(pages)..where((t) => t.id.equals(rows[i].id)))
+              .write(PagesCompanion(pageIndex: Value(i + 1)));
+        }
+      }
+    });
+  }
+
+  /// 新增页应使用的下一个 pageIndex（= 当前最大值 + 1，避免重复）。
+  Future<int> nextPageIndex(int paperId) async {
+    final rows =
+        await (select(pages)..where((t) => t.paperId.equals(paperId))).get();
+    var maxIndex = 0;
+    for (final row in rows) {
+      if (row.pageIndex > maxIndex) maxIndex = row.pageIndex;
+    }
+    return maxIndex + 1;
+  }
 
   // --- Question ---
 
@@ -209,20 +249,82 @@ class MistakeDatabase extends _$MistakeDatabase {
     String? processedImagePath,
     String processingStatus = 'cropped',
     double? printScaleOverride,
-  }) =>
-      into(blocks).insert(BlocksCompanion.insert(
-        questionId: questionId,
-        pageId: pageId,
-        blockType: blockType,
-        x: x,
-        y: y,
-        width: width,
-        height: height,
-        sortOrder: Value(sortOrder),
-        processedImagePath: Value(processedImagePath),
-        processingStatus: Value(processingStatus),
-        printScaleOverride: Value(printScaleOverride),
-      ));
+  }) {
+    _validateBlock(
+      blockType: blockType,
+      x: x,
+      y: y,
+      width: width,
+      height: height,
+      processingStatus: processingStatus,
+      printScaleOverride: printScaleOverride,
+    );
+    return into(blocks).insert(BlocksCompanion.insert(
+      questionId: questionId,
+      pageId: pageId,
+      blockType: blockType,
+      x: x,
+      y: y,
+      width: width,
+      height: height,
+      sortOrder: Value(sortOrder),
+      processedImagePath: Value(processedImagePath),
+      processingStatus: Value(processingStatus),
+      printScaleOverride: Value(printScaleOverride),
+    ));
+  }
+
+  /// 下一个可用的 sortOrder（当前最大值 + 1），避免删除块后出现重复序号。
+  Future<int> nextSortOrder(int questionId) async {
+    final rows = await (select(blocks)
+          ..where((t) => t.questionId.equals(questionId)))
+        .get();
+    var maxOrder = -1;
+    for (final row in rows) {
+      if (row.sortOrder > maxOrder) maxOrder = row.sortOrder;
+    }
+    return maxOrder + 1;
+  }
+
+  /// 数据库入库前的集中校验（UI 与裁剪服务之外的兜底防线）。
+  void _validateBlock({
+    required String blockType,
+    required double x,
+    required double y,
+    required double width,
+    required double height,
+    required String processingStatus,
+    double? printScaleOverride,
+  }) {
+    const double epsilon = 1e-6;
+    if (!kBlockTypes.contains(blockType)) {
+      throw ArgumentError.value(blockType, 'blockType', '未知的区块类型');
+    }
+    if (!kBlockProcessingStatuses.contains(processingStatus)) {
+      throw ArgumentError.value(
+          processingStatus, 'processingStatus', '未知的处理状态');
+    }
+    if (printScaleOverride != null &&
+        (printScaleOverride <= 0 || printScaleOverride > 10)) {
+      throw ArgumentError.value(
+          printScaleOverride, 'printScaleOverride', '缩放必须大于 0 且不超过 10');
+    }
+    if (x.isNaN || y.isNaN || width.isNaN || height.isNaN) {
+      throw ArgumentError('区块坐标不能为 NaN');
+    }
+    if (x < -epsilon ||
+        y < -epsilon ||
+        width <= epsilon ||
+        height <= epsilon) {
+      throw ArgumentError('区块必须位于图片内且具有正面积');
+    }
+    if (x >= 1.0 || y >= 1.0) {
+      throw ArgumentError('区块左上角必须小于 1.0');
+    }
+    if (x + width > 1.0 + epsilon || y + height > 1.0 + epsilon) {
+      throw ArgumentError('区块超出归一化图片范围');
+    }
+  }
 
   Future<void> deleteBlock(int blockId) =>
       (delete(blocks)..where((t) => t.id.equals(blockId))).go();

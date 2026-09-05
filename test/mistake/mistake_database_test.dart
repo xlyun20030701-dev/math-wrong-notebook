@@ -117,4 +117,123 @@ void main() {
     expect(await db.watchPagesOfPaper(paperId).first, isEmpty);
     expect(await db.watchQuestionsOfPaper(paperId).first, isEmpty);
   });
+
+  test('block insert validates normalized coords, type, status and scale',
+      () async {
+    final paperId = await db.insertPaper(title: 'p');
+    final pageId = await db.insertPage(
+        paperId: paperId, originalImagePath: 'x', pageIndex: 1);
+    final qid = await db.insertQuestion(
+        paperId: paperId, originalQuestionNumber: '1');
+
+    Future<void> bad({
+      String? blockType,
+      String? status,
+      double? scale,
+      double x = 0.1,
+      double y = 0.1,
+      double width = 0.4,
+      double height = 0.4,
+    }) {
+      return expectLater(
+        () => db.insertBlock(
+          questionId: qid,
+          pageId: pageId,
+          blockType: blockType ?? 'stem',
+          x: x,
+          y: y,
+          width: width,
+          height: height,
+          processingStatus: status ?? 'cropped',
+          printScaleOverride: scale,
+        ),
+        throwsArgumentError,
+      );
+    }
+
+    // 合法插入一次。
+    await db.insertBlock(
+        questionId: qid,
+        pageId: pageId,
+        blockType: 'stem',
+        x: 0.1,
+        y: 0.1,
+        width: 0.4,
+        height: 0.4);
+
+    await bad(blockType: 'unknown');
+    await bad(status: 'weird');
+    await bad(scale: 0);
+    await bad(scale: 11);
+    await bad(x: -0.1);
+    await bad(width: 0);
+    await bad(x: 0.9, width: 0.2);
+    await bad(y: 0.9, height: 0.2);
+    await bad(x: 1.0, width: 0.1);
+    await bad(width: double.nan);
+  });
+
+  test('pageIndex never duplicates after gaps; resequence fills holes',
+      () async {
+    final paperId = await db.insertPaper(title: 'pages');
+    // 直接造出 1 和 3 的“跳号”场景。
+    await db.insertPage(
+        paperId: paperId, originalImagePath: 'a', pageIndex: 1);
+    final page3 = await db.insertPage(
+        paperId: paperId, originalImagePath: 'b', pageIndex: 3);
+
+    // 即使当前只有 1、3，新增页也必须取 max+1=4，而不是取 2 与 3 重复。
+    expect(await db.nextPageIndex(paperId), 4);
+
+    // 删除第 3 页后自动重排为 1。
+    await db.deletePageAndResequence(page3);
+    final pages = await db.watchPagesOfPaper(paperId).first;
+    expect(pages, hasLength(1));
+    expect(pages.first.pageIndex, 1);
+    expect(await db.nextPageIndex(paperId), 2);
+  });
+
+  test('nextSortOrder avoids duplicates after block deletion', () async {
+    final paperId = await db.insertPaper(title: 's');
+    final pageId = await db.insertPage(
+        paperId: paperId, originalImagePath: 'x', pageIndex: 1);
+    final qid = await db.insertQuestion(
+        paperId: paperId, originalQuestionNumber: '1');
+    final b1 = await db.insertBlock(
+        questionId: qid,
+        pageId: pageId,
+        blockType: 'stem',
+        x: 0.1,
+        y: 0.1,
+        width: 0.4,
+        height: 0.4,
+        sortOrder: 0);
+    final b2 = await db.insertBlock(
+        questionId: qid,
+        pageId: pageId,
+        blockType: 'figure',
+        x: 0.2,
+        y: 0.2,
+        width: 0.4,
+        height: 0.4,
+        sortOrder: await db.nextSortOrder(qid));
+    expect(await db.nextSortOrder(qid), 2);
+
+    // 删除靠前的块后，新序号仍不与现存重复。
+    await db.deleteBlock(b1);
+    expect(await db.nextSortOrder(qid), 2);
+    final order2 = await db.insertBlock(
+        questionId: qid,
+        pageId: pageId,
+        blockType: 'answer',
+        x: 0.3,
+        y: 0.3,
+        width: 0.4,
+        height: 0.4,
+        sortOrder: await db.nextSortOrder(qid));
+    final remaining = await db.blocksOfQuestion(qid);
+    expect(remaining.map((b) => b.sortOrder).toSet(), <int>{1, 2});
+    await db.deleteBlock(b2);
+    await db.deleteBlock(order2);
+  });
 }

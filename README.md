@@ -1,96 +1,79 @@
-# AI错题本 (AI Wrong Notebook)
+# 数学错题整理（本地离线版）
 
-一款面向学生的智能错题管理应用，把拍题、解析、保存、追问和练习串成完整学习闭环。
+一款**个人使用、Android、本地离线、以打印为核心**的数学错题整理 App。
 
-<p align="center">
-  <a href="https://github.com/tjunsh/ai-wrong-notebook/actions/workflows/ci.yml">
-    <img src="https://github.com/tjunsh/ai-wrong-notebook/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI status" />
-  </a>
-  <a href="https://github.com/tjunsh/ai-wrong-notebook/actions/workflows/release.yml">
-    <img src="https://github.com/tjunsh/ai-wrong-notebook/actions/workflows/release.yml/badge.svg" alt="Release status" />
-  </a>
-  <a href="https://github.com/tjunsh/ai-wrong-notebook/releases/latest">
-    <img src="https://img.shields.io/github/v/release/tjunsh/ai-wrong-notebook?display_name=tag&sort=semver" alt="Latest release" />
-  </a>
-  <img src="https://img.shields.io/badge/platform-Android-3ddc84?logo=android&logoColor=white" alt="Android" />
-  <img src="https://img.shields.io/badge/Flutter-02569B?logo=flutter&logoColor=white" alt="Flutter" />
-  <img src="https://img.shields.io/badge/Dart-0175C2?logo=dart&logoColor=white" alt="Dart" />
-  <a href="LICENSE">
-    <img src="https://img.shields.io/badge/license-MIT-3da639" alt="MIT License" />
-  </a>
-</p>
+原项目（AI 错题本）基于 Flutter 开发；本项目在保留 Flutter / Riverpod / GoRouter / Drift 等工程基础的同时，
+改造成**不使用任何 AI / OCR / 云服务**的本地应用。当前阶段数据与代码为全新设计，不与旧 AI 数据库兼容。
 
-## 功能特性
+**产品原则：数学内容准确 > 自动化程度 > 视觉效果。原图永不修改、不改坏公式与图形。**
 
-### 核心功能
-- **拍照录题** - 使用相机或相册快速录入错题，支持框选裁剪
-- **AI 视觉分析** - AI 直接分析错题图片，识别科目、题干、答案、关键步骤、错因和知识点
-- **连续扫题与排队解析** - 当前题解析中仍可继续拍题；任务在后台按顺序处理，避免并发请求和重复消耗
-- **多题逐题解析** - 一张图片中的独立题目分别解析、分别保存，避免不同题目的答案和知识点混在一起
-- **失败题单独重试** - 多题中某一题失败时，已成功题保持不变；可在原结果页只重试失败题
-- **保存或放弃** - 解析后可选择保存到错题本或直接放弃；部分成功时只允许保存已经解析成功的题目
-- **AI 自动打标** - 自动生成短标签（如"压强"、"力学"）和详细知识点
-- **AI 追问** - 在已保存错题详情中继续提问，追问记录随题目保存
-- **举一反三** - 根据错题生成针对性练习，完成一轮后可继续生成新题
-- **间隔复习** - 基于记忆曲线安排复习计划
-- **学习统计** - 掌握进度可视化（柱状图 + 统计卡片）
+## 当前功能（Phase 1）
 
-### v1.0.5 更新
-- **严格任务队列** - 连续扫描多张图片时，AI 请求按顺序执行；用户可以离开解析页继续录题，不会并发消耗多个请求。
-- **多题结果可补全** - 部分成功的扫描结果保留在同一张任务卡中，失败题可逐题重试，不会产生重复任务或重复解析成功题。
-- **结果更可控** - 未保存的扫描结果可直接放弃；保存时会过滤失败题，并在部分成功时要求确认。
-- **配置向导优化** - 可选择服务商预设自动填写 Base URL，获取可用模型后选择模型，并在保存前测试连接；仍支持自定义 OpenAI 兼容接口。
-- **本地任务维护** - 支持导出失败日志、清理历史任务和一键清空本地题库及排队任务。
+- **试卷（Paper）管理**：新建 / 编辑 / 删除试卷。
+- **拍照 / 相册导入多张试卷照片（Page）**：原图保留在本地文件系统，永不修改。
+- **本地确定性图片质量检查**：清晰度（Laplacian 方差）、曝光、有效分辨率；
+  质量不佳时不强制拒绝，由用户选择「仍然使用 / 重新拍摄 / 跳过」。
+- **Page 浏览器**：横向翻页浏览每张试卷照片。
+- **手动矩形框选错题区域（Block）**：选区以 0~1 归一化坐标保存；
+  支持左上 / 中央 / 右下、反向拖动与边界越界，保存前校验选区是否过小。
+- **错题篮**：框选后可「新建错题」或「加入已有错题（Q3 / Q7 / Q11…）」，
+  支持**跨页**给同一道错题连续添加区域块。
+- **Block 分类**：题干 / 选项 / 题目续接 / 图形 / 答案 / 解答过程 / 答题过程 / 老师批注 / 其他。
+- **错题本与错题详情**：题目列表、Block 缩略图、**拖动排序**、删除、题号/标题/知识点编辑。
+- **答案资源（AnswerResource）数据模型**：答案与题目分离，可标记来源（原卷/答案册/搜题/AI 平台截图/手输等，仅作标签）。
 
-### 用户界面
-- Material Design 3 设计语言
-- 支持浅色模式 / 深色模式 / 跟随系统
-- 流畅的页面切换动画
+### 不包含的能力
+
+本项目明确**不包含**以下内容（未来也不会加入为产品功能）：
+
+- 云服务器、账号登录、联网同步
+- OCR / 数学 OCR / LaTeX 识别
+- 大语言模型、AI 视觉分析、AI 追问、AI 出题、AI 图片增强
+- 任何改变公式、符号、数字、几何图的生成式处理
+- API Key / 付费 OCR / LLM 服务
 
 ## 技术栈
 
 | 分类 | 技术 |
 |------|------|
-| 框架 | Flutter 3.4+ |
+| 框架 | Flutter（Android） |
 | 状态管理 | Riverpod |
 | 路由 | GoRouter |
-| 本地数据库 | Drift (SQLite) |
-| 轻量存储 | SharedPreferences |
-| 网络请求 | Dio |
-| 主题方案 | flex_color_scheme |
-| 图表 | fl_chart |
-| AI 服务 | 兼容 OpenAI 格式 API 的多模态模型 |
+| 本地数据库 | Drift (SQLite，独立于旧库) |
+| 图片本地处理 | image（纯 Dart 解码 / 裁剪 / 指标） |
 | 图片选择 | image_picker |
-| 图片裁剪 | image_cropper |
-| 数据导入导出 | share_plus + file_picker |
-| 本地通知 | flutter_local_notifications |
-| 安全存储 | flutter_secure_storage |
-| 序列化 | json_annotation + json_serializable |
-| ID 生成 | uuid |
-| 国际化 | intl |
+| 主题方案 | flex_color_scheme + Material 3 |
+
+图片处理全部在**本地**完成：灰度直方图 / Laplacian 清晰度 / 曝光统计 / 矩形裁剪等，
+不使用任何 AI 模型或云端接口。
 
 ## 项目结构
 
 ```
 lib/
-├── app/                  # 应用入口、路由、主题
-├── common/widgets/       # 通用组件
-├── data/                 # 数据层
-│   ├── files/           # 文件存储
-│   ├── remote/ai/       # AI 分析服务
-│   ├── repositories/    # 数据仓库（Drift + SharedPreferences）
-│   └── services/        # 服务（拍照、存储、通知等）
-├── domain/models/       # 领域模型
-└── features/           # 功能模块
-    ├── analysis/        # AI 分析（加载 + 结果展示）
-    ├── capture/         # 拍照录题（裁剪、预览）
-    ├── exercise/        # 举一反三练习
-    ├── home/            # 首页
-    ├── notebook/        # 错题本（列表 + 详情）
-    ├── onboarding/      # 引导页
-    ├── review/          # 间隔复习
-    └── settings/        # 设置（AI配置、数据管理）
+├── main.dart                       # 新应用入口（本地离线产品）
+├── src/mistake/                    # 当前产品代码
+│   ├── db/                         # Drift 数据模型 Paper/Page/Question/Block/AnswerResource
+│   ├── storage/                    # 本地图片存储（原图/区块裁剪）
+│   ├── services/                   # 图片质量检查、选区归一化几何
+│   ├── screens/                    # 试卷/页浏览/框选/错题本/错题详情
+│   └── providers.dart
+└── src/…（旧 AI 错题本模块，暂保留待后续阶段清理，不参与新入口）
 ```
+
+## 数据与隐私
+
+- 所有数据与图片保存在**本地**（SQLite + 文件系统），不联网、不收集任何信息。
+- 拍摄 / 导入的原始照片被原样保留在
+  `papers/<paperId>/original/`；框选裁剪产物写入 `papers/<paperId>/blocks/`。
+- Block 坐标使用归一化 0~1 存储（`x, y, width, height`），保证与显示尺寸无关。
+
+## 路线图（后续阶段）
+
+- **Phase 2**：本地图像清理（光照归一化、去噪、锐化、白边裁剪、彩色手写去除）、
+  手写擦除/恢复编辑器、字号统一估算、标签管理、ZIP 备份恢复。
+- **Phase 3**：打印核心 —— A4 排版引擎、剪贴错题纸 / 复习卷两种 PDF 模式、
+  每题答题空间调节、A4 预览与导出、Android 打印分享。
 
 ## 开发
 
@@ -108,70 +91,23 @@ flutter pub get
 flutter run
 ```
 
+### 测试与静态检查
+```bash
+flutter analyze
+flutter test
+```
+
 ### 构建 APK
 ```bash
 flutter build apk --release
 ```
 
-发布构建需要在本地创建并妥善保管 `android/key.properties` 和签名 keystore；两者均已被 Git 忽略，不应提交到仓库。
+## 原项目来源
 
-### 测试
-```bash
-flutter test
-```
-
-## AI 服务配置
-
-应用支持配置任意 OpenAI 兼容格式的 AI 服务。用于拍照识题的模型必须支持 Vision/图片输入：
-
-1. 进入「设置」→「AI 服务商配置」，选择服务商预设或「自定义」。
-2. 预设会自动填写 Base URL；填写 API Key 后可获取模型列表并选择模型。自定义服务可手动填写 Base URL 和模型名称。
-3. 点击「保存并测试」，连接通过后即可使用。
-
-不同服务商的模型能力和稳定性不同，请以实际的图片识题测试结果为准。
-
-## 鸣谢
-
-感谢 [Dohoya.com](https://www.dohoya.com/sign-up?aff=hiUV)  
-感谢 [Vbcode.io](https://vbcode.io/sign-up?aff=lEmu)
-
-对 AI错题本项目的大模型 API 支持。 
-本项目的 AI 视觉分析能力基于兼容 OpenAI API 格式的多模态模型，用户可在应用内自行配置 API 地址、API Key 和模型名称。
-
-> 本项目不内置 API Key，也不绑定特定服务商；<br>
-> [dohoya.com]和[vbcode.io] 为推荐的大模型 API 服务提供方之一。
-
-
-## APP 截图
-<table>
-  <tr>
-    <td width="50%"><img width="100%" alt="首页截图" src="https://github.com/user-attachments/assets/e2e6fdd6-4ed8-42c9-b69c-57eaa30d2faa" /></td>
-    <td width="50%"><img width="100%" alt="AI 服务配置截图" src="https://github.com/user-attachments/assets/6c4b6d0d-5d11-4d08-86eb-969013aa18c2" /></td>
-  </tr>
-  <tr>
-    <td width="50%"><img width="100%" alt="错题分析截图" src="https://github.com/user-attachments/assets/68a6c5ce-32dc-428d-af4f-b48f98d5eafc" /></td>
-    <td width="50%"><img width="100%" alt="练习复习截图" src="https://github.com/user-attachments/assets/3f31dd6d-cd96-4bcf-934a-e183b937b0f5" /></td>
-  </tr>
-</table>
-
-## Star History
-
-<a href="https://www.star-history.com/?repos=tjunsh%2Fai-wrong-notebook&type=date&legend=bottom-right">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=tjunsh/ai-wrong-notebook&type=date&theme=dark&legend=bottom-right&sealed_token=2lVYUUSKE8Xg32kBXKLor7LPPEricQqczyw-61c4TjLwI8lSK_eOk3jD3MovEhuEyaOv9ZBIaBDZ4X0hXwNB2UXtGtPHBEm8mYBD6xHGCIS7kpQPTB8IP0WvStcKiTnEEVL1PdpOZruKI84VrOxGmXsb8LVwYgmLeP9E6x6kqj8WD6AI7fd2OBc2BAjW" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=tjunsh/ai-wrong-notebook&type=date&legend=bottom-right&sealed_token=2lVYUUSKE8Xg32kBXKLor7LPPEricQqczyw-61c4TjLwI8lSK_eOk3jD3MovEhuEyaOv9ZBIaBDZ4X0hXwNB2UXtGtPHBEm8mYBD6xHGCIS7kpQPTB8IP0WvStcKiTnEEVL1PdpOZruKI84VrOxGmXsb8LVwYgmLeP9E6x6kqj8WD6AI7fd2OBc2BAjW" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=tjunsh/ai-wrong-notebook&type=date&legend=bottom-right&sealed_token=2lVYUUSKE8Xg32kBXKLor7LPPEricQqczyw-61c4TjLwI8lSK_eOk3jD3MovEhuEyaOv9ZBIaBDZ4X0hXwNB2UXtGtPHBEm8mYBD6xHGCIS7kpQPTB8IP0WvStcKiTnEEVL1PdpOZruKI84VrOxGmXsb8LVwYgmLeP9E6x6kqj8WD6AI7fd2OBc2BAjW" />
- </picture>
-</a>
-
-## 欢迎大家赞赏和支持
-
-如果这个工具帮到了你，欢迎请作者喝杯咖啡。
-
-[在爱发电赞赏](https://afdian.com/a/tjunsh)
-
-开发不易，目标筹款99刀，就可以注册一个iOS开发者账号了～
+本项目由 [tjunsh/ai-wrong-notebook](https://github.com/tjunsh/ai-wrong-notebook)
+（AI 错题本）改造而来。原项目的技术栈与部分工程结构为本项目提供了基础；
+当前产品已去除 AI / OCR 相关产品能力，改为本地离线的数学错题整理与打印工具。
 
 ## License
 
-MIT
+MIT（详见 [LICENSE](LICENSE)）。

@@ -1,17 +1,24 @@
+import 'dart:io';
+import 'dart:math' as math;
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image/image.dart' as img;
 import 'package:smart_wrong_notebook/src/mistake/db/mistake_database.dart';
 import 'package:smart_wrong_notebook/src/mistake/db/tables.dart';
 import 'package:smart_wrong_notebook/src/mistake/labels.dart';
 import 'package:smart_wrong_notebook/src/mistake/providers.dart';
-
-import 'dart:io';
-import 'dart:math' as math;
+import 'package:smart_wrong_notebook/src/mistake/services/block_geometry.dart';
+import 'package:smart_wrong_notebook/src/mistake/storage/mistake_image_store.dart';
 
 /// 在一张 Page 上手动框选矩形区域，并加入（新建/已有）错题。
 class BlockSelectScreen extends ConsumerStatefulWidget {
-  const BlockSelectScreen({required this.pageId, required this.paperId, super.key});
+  const BlockSelectScreen({
+    required this.pageId,
+    required this.paperId,
+    super.key,
+  });
 
   final int pageId;
   final int paperId;
@@ -21,10 +28,22 @@ class BlockSelectScreen extends ConsumerStatefulWidget {
 }
 
 class _BlockSelectScreenState extends ConsumerState<BlockSelectScreen> {
-  Rect? _imageRect; // 在页面坐标系中的选择（规范化在保存时计算）
-  Offset? _dragStart;
-  Offset? _dragCurrent;
+  /// 已归一化（0~1）的选择矩形。
+  Rect? _imageRect;
+  Offset? _dragStartPx;
+  bool _dragging = false;
   String _blockType = 'stem';
+
+  /// 当前页面的一次性解码缓存，避免连续框选同一页时反复整图解码。
+  img.Image? _cachedBaked;
+  String? _cachedBakedPath;
+
+  @override
+  void dispose() {
+    _cachedBaked = null;
+    _cachedBakedPath = null;
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -32,14 +51,15 @@ class _BlockSelectScreenState extends ConsumerState<BlockSelectScreen> {
     final basketAsync =
         ref.watch(watchQuestionsOfPaperProvider(widget.paperId));
     return pageAsync.when(
-      loading: () => const Scaffold(body: Center(child: CircularProgressIndicator())),
+      loading: () =>
+          const Scaffold(body: Center(child: CircularProgressIndicator())),
       error: (e, _) => Scaffold(body: Center(child: Text('加载失败：$e'))),
       data: (page) {
         if (page == null) {
           return const Scaffold(body: Center(child: Text('页面不存在')));
         }
         final basket = basketAsync.value ?? const <Question>[];
-        final selection = _selectionNormalized();
+        final selection = _imageRect;
         return Scaffold(
           appBar: AppBar(
             title: Text('框选 · 第 ${page.pageIndex} 页'),
@@ -50,8 +70,8 @@ class _BlockSelectScreenState extends ConsumerState<BlockSelectScreen> {
                   icon: const Icon(CupertinoIcons.clear),
                   onPressed: () => setState(() {
                     _imageRect = null;
-                    _dragStart = null;
-                    _dragCurrent = null;
+                    _dragStartPx = null;
+                    _dragging = false;
                   }),
                 ),
             ],
@@ -72,7 +92,8 @@ class _BlockSelectScreenState extends ConsumerState<BlockSelectScreen> {
                             child: ChoiceChip(
                               label: Text(blockTypeLabels[type] ?? type),
                               selected: _blockType == type,
-                              onSelected: (_) => setState(() => _blockType = type),
+                              onSelected: (_) =>
+                                  setState(() => _blockType = type),
                             ),
                           ),
                       ],
@@ -86,9 +107,9 @@ class _BlockSelectScreenState extends ConsumerState<BlockSelectScreen> {
                           ? null
                           : () => _saveToQuestion(selection, basket),
                       icon: const Icon(CupertinoIcons.plus_rectangle_on_rectangle),
-                      label: Text(selection == null
-                          ? '拖拽框选题目区域'
-                          : '保存区块到错题'),
+                      label: Text(
+                        selection == null ? '拖拽框选题目区域' : '保存区块到错题',
+                      ),
                     ),
                   ),
                 ],
@@ -118,26 +139,34 @@ class _BlockSelectScreenState extends ConsumerState<BlockSelectScreen> {
     final imageAspect = _pageAspect(page);
     final areaW = math.max(1.0, viewport.width - 24);
     final areaH = math.max(1.0, viewport.height - 200);
-    final fitW =
-        areaH * imageAspect < areaW ? areaH * imageAspect : areaW;
+    final fitW = areaH * imageAspect < areaW ? areaH * imageAspect : areaW;
     final fitH = areaW / imageAspect < areaH ? areaW / imageAspect : areaH;
+    final displaySize = Size(fitW, fitH);
 
     return SizedBox(
       width: fitW,
       height: fitH,
       child: GestureDetector(
         onPanStart: (d) => setState(() {
-          _dragStart = d.localPosition;
-          _dragCurrent = d.localPosition;
+          _dragStartPx = d.localPosition;
+          _dragging = true;
         }),
-        onPanUpdate: (d) => setState(() {
-          _dragCurrent = d.localPosition;
-          _imageRect = _normalizedRect(d.localPosition);
-        }),
-        onPanEnd: (_) {
-          _dragStart = null;
-          _dragCurrent = null;
+        onPanUpdate: (d) {
+          final start = _dragStartPx;
+          if (start == null) return;
+          final pxRect = Rect.fromPoints(start, d.localPosition);
+          setState(() {
+            _imageRect = normalizeBlockRect(pxRect, displaySize);
+          });
         },
+        onPanEnd: (_) => setState(() {
+          _dragging = false;
+          _dragStartPx = null;
+        }),
+        onPanCancel: () => setState(() {
+          _dragging = false;
+          _dragStartPx = null;
+        }),
         child: Stack(
           fit: StackFit.expand,
           children: <Widget>[
@@ -153,7 +182,7 @@ class _BlockSelectScreenState extends ConsumerState<BlockSelectScreen> {
               CustomPaint(
                 painter: _SelectionPainter(
                   normalized: _imageRect!,
-                  active: _dragCurrent != null,
+                  active: _dragging,
                   color: Theme.of(context).colorScheme.primary,
                 ),
               ),
@@ -188,28 +217,16 @@ class _BlockSelectScreenState extends ConsumerState<BlockSelectScreen> {
     return 3.0 / 4.0;
   }
 
-  Rect? _selectionNormalized() {
-    final r = _imageRect;
-    if (r == null) return null;
-    return Rect.fromLTRB(
-      r.left.clamp(0.0, 1.0),
-      r.top.clamp(0.0, 1.0),
-      r.right.clamp(0.0, 1.0),
-      r.bottom.clamp(0.0, 1.0),
-    );
-  }
-
-  Rect _normalizedRect(Offset current) {
-    final start = _dragStart ?? current;
-    final left = math.min(start.dx, current.dx);
-    final top = math.min(start.dy, current.dy);
-    final right = math.max(start.dx, current.dx);
-    final bottom = math.max(start.dy, current.dy);
-    return Rect.fromLTRB(left, top, right, bottom);
-  }
-
   Future<void> _saveToQuestion(
       Rect selection, List<Question> basket) async {
+    // 保存前防御：拒绝退化/过小选区，明确提示重新框选。
+    if (!isValidBlockRect(selection)) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('选区过小，请重新框选后再保存')),
+      );
+      return;
+    }
     final picked = await _pickTarget(basket);
     if (picked == null || !mounted) return;
     final db = ref.read(mistakeDbProvider);
@@ -228,15 +245,17 @@ class _BlockSelectScreenState extends ConsumerState<BlockSelectScreen> {
       } else {
         questionId = picked.existingQuestionId!;
       }
-      final cropped = await store.cropBlock(
+      // 同一页面多次框选时复用一次解码结果，避免反复整图解码。
+      final baked = await _bakedImageFor(page.originalImagePath, store);
+      final cropped = await store.cropBaked(
         widget.paperId,
-        page.originalImagePath,
+        baked,
         x: selection.left,
         y: selection.top,
         width: selection.width,
         height: selection.height,
       );
-      final existing = await db.blocksOfQuestion(questionId);
+      final sortOrder = await db.nextSortOrder(questionId);
       await db.insertBlock(
         questionId: questionId,
         pageId: widget.pageId,
@@ -245,7 +264,7 @@ class _BlockSelectScreenState extends ConsumerState<BlockSelectScreen> {
         y: selection.top,
         width: selection.width,
         height: selection.height,
-        sortOrder: existing.length,
+        sortOrder: sortOrder,
         processedImagePath: cropped,
         processingStatus: 'cropped',
       );
@@ -254,19 +273,34 @@ class _BlockSelectScreenState extends ConsumerState<BlockSelectScreen> {
       final label = picked.isNew || matched.isEmpty
           ? '新错题'
           : questionDisplayLabel(matched.first);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('已保存到 $label')),
-      );
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text('已保存到 $label')));
       setState(() {
         _imageRect = null;
-        _dragCurrent = null;
-        _dragStart = null;
+        _dragStartPx = null;
+        _dragging = false;
       });
     } catch (e) {
       if (!mounted) return;
+      final message = e is ArgumentError || e is StateError
+          ? '无法保存：${e.toString().replaceFirst('Invalid argument(s): ', '')}'
+          : '保存失败：$e';
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('保存失败：$e')));
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(message)));
     }
+  }
+
+  Future<img.Image> _bakedImageFor(
+      String path, MistakeImageStore store) async {
+    if (_cachedBaked != null && _cachedBakedPath == path) {
+      return _cachedBaked!;
+    }
+    final baked = await store.decodeBaked(path);
+    _cachedBaked = baked;
+    _cachedBakedPath = path;
+    return baked;
   }
 
   Future<_BlockTarget?> _pickTarget(List<Question> basket) async {
@@ -307,7 +341,8 @@ class _BlockSelectScreenState extends ConsumerState<BlockSelectScreen> {
                         ActionChip(
                           avatar: const Icon(CupertinoIcons.add, size: 16),
                           label: const Text('新建错题'),
-                          onPressed: () => setSheetState(() => createMode = true),
+                          onPressed: () =>
+                              setSheetState(() => createMode = true),
                         ),
                         if (basket.isEmpty)
                           const Padding(
@@ -334,18 +369,19 @@ class _BlockSelectScreenState extends ConsumerState<BlockSelectScreen> {
                         FilledButton(
                           onPressed: () {
                             final numberText = number.text.trim();
-                            if (numberText.isEmpty && title.text.trim().isEmpty) {
+                            final titleText = title.text.trim();
+                            if (numberText.isEmpty && titleText.isEmpty) {
                               return;
                             }
-                            Navigator.pop(context, _BlockTarget(
-                                null, _blockType,
-                                NewQuestionInput(
-                                    number: numberText.isEmpty
-                                        ? null
-                                        : numberText,
-                                    title: title.text.trim().isEmpty
-                                        ? null
-                                        : title.text.trim())));
+                            Navigator.pop(
+                                context,
+                                _BlockTarget(
+                                    null,
+                                    _blockType,
+                                    NewQuestionInput(
+                                        number:
+                                            numberText.isEmpty ? null : numberText,
+                                        title: titleText.isEmpty ? null : titleText)));
                           },
                           child: const Text('创建并保存'),
                         ),
@@ -381,7 +417,6 @@ class _BlockTarget {
   final String blockType;
   final NewQuestionInput? newQuestion;
 
-  int? get questionId => existingQuestionId;
   bool get isNew => newQuestion != null;
 }
 
@@ -398,11 +433,11 @@ class _SelectionPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final rect = Rect.fromLTRB(
+    final rect = Rect.fromLTWH(
       normalized.left * size.width,
       normalized.top * size.height,
-      normalized.right * size.width,
-      normalized.bottom * size.height,
+      normalized.width * size.width,
+      normalized.height * size.height,
     );
     canvas.drawRect(
       rect,
