@@ -1,4 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:smart_wrong_notebook/src/mistake/ai/ai_actions.dart';
+import 'package:smart_wrong_notebook/src/mistake/ai/ai_chat_client.dart';
+import 'package:smart_wrong_notebook/src/mistake/ai/ai_settings.dart';
 import 'package:smart_wrong_notebook/src/mistake/db/mistake_database.dart';
 import 'package:smart_wrong_notebook/src/mistake/services/image_quality.dart';
 import 'package:smart_wrong_notebook/src/mistake/storage/mistake_image_store.dart';
@@ -11,6 +14,22 @@ final Provider<MistakeImageStore> mistakeImageStoreProvider =
 
 final Provider<MistakeImageQuality> imageQualityProvider =
     Provider<MistakeImageQuality>((ref) => const MistakeImageQuality());
+
+final Provider<AiSettingsStore> aiSettingsStoreProvider =
+    Provider<AiSettingsStore>((ref) => SecureAiSettingsStore());
+
+final Provider<AiChatClient> aiChatClientProvider =
+    Provider<AiChatClient>((ref) {
+  return OpenAiChatClient(settings: ref.read(aiSettingsStoreProvider));
+});
+
+final Provider<AiActions> aiActionsProvider = Provider<AiActions>((ref) {
+  return AiActions(
+    db: ref.read(mistakeDbProvider),
+    chat: ref.read(aiChatClientProvider),
+    settings: ref.read(aiSettingsStoreProvider),
+  );
+});
 
 /// 所有试卷，按最近更新排序。
 final watchPapersProvider =

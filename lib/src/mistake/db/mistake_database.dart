@@ -19,6 +19,11 @@ part 'mistake_database.g.dart';
   Questions,
   Blocks,
   AnswerResources,
+  BlockVersions,
+  AiUnderstandings,
+  AiMistakes,
+  GeneratedExercises,
+  PrintItems,
 ])
 class MistakeDatabase extends _$MistakeDatabase {
   MistakeDatabase._internal(super.e);
@@ -31,12 +36,23 @@ class MistakeDatabase extends _$MistakeDatabase {
   MistakeDatabase.memory() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
         beforeOpen: (details) async {
           await customStatement('PRAGMA foreign_keys = ON');
+        },
+        onUpgrade: (migrator, from, to) async {
+          if (from < 2) {
+            await migrator.addColumn(questions, questions.questionType);
+            await migrator.addColumn(questions, questions.difficulty);
+            await migrator.createTable(blockVersions);
+            await migrator.createTable(aiUnderstandings);
+            await migrator.createTable(aiMistakes);
+            await migrator.createTable(generatedExercises);
+            await migrator.createTable(printItems);
+          }
         },
       );
 
@@ -237,6 +253,9 @@ class MistakeDatabase extends _$MistakeDatabase {
             ..orderBy([(t) => OrderingTerm.asc(t.sortOrder)]))
           .get();
 
+  Future<Block?> blockById(int blockId) =>
+      (select(blocks)..where((t) => t.id.equals(blockId))).getSingleOrNull();
+
   Future<int> insertBlock({
     required int questionId,
     required int pageId,
@@ -371,6 +390,158 @@ class MistakeDatabase extends _$MistakeDatabase {
 
   Future<void> deleteAnswerResource(int id) =>
       (delete(answerResources)..where((t) => t.id.equals(id))).go();
+
+  // --- BlockVersion ---
+
+  Stream<List<BlockVersion>> watchBlockVersions(int blockId) =>
+      (select(blockVersions)
+            ..where((t) => t.blockId.equals(blockId))
+            ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
+          .watch();
+
+  Future<int> insertBlockVersion(BlockVersionsCompanion companion) =>
+      into(blockVersions).insert(companion);
+
+  /// 把该 block 其余版本的 useForPrint 置 false，仅保留 [versionId] 为 true。
+  Future<void> setPrintVersion(int blockId, int versionId) async {
+    await transaction(() async {
+      await (update(blockVersions)..where((t) => t.blockId.equals(blockId)))
+          .write(const BlockVersionsCompanion(useForPrint: Value(false)));
+      await (update(blockVersions)..where((t) => t.id.equals(versionId)))
+          .write(const BlockVersionsCompanion(useForPrint: Value(true)));
+    });
+  }
+
+  Future<void> setBlockVersionVerified(int versionId, bool verified) =>
+      (update(blockVersions)..where((t) => t.id.equals(versionId)))
+          .write(BlockVersionsCompanion(verified: Value(verified)));
+
+  Future<void> deleteBlockVersion(int versionId) =>
+      (delete(blockVersions)..where((t) => t.id.equals(versionId))).go();
+
+  // --- AiUnderstanding (每 Question 单条，upsert) ---
+
+  Stream<AiUnderstanding?> watchUnderstanding(int questionId) =>
+      (select(aiUnderstandings)
+            ..where((t) => t.questionId.equals(questionId)))
+          .watchSingleOrNull();
+
+  Future<AiUnderstanding?> understandingOf(int questionId) =>
+      (select(aiUnderstandings)
+            ..where((t) => t.questionId.equals(questionId)))
+          .getSingleOrNull();
+
+  Future<void> upsertUnderstanding(
+    int questionId,
+    AiUnderstandingsCompanion data,
+  ) async {
+    final existing = await (select(aiUnderstandings)
+          ..where((t) => t.questionId.equals(questionId)))
+        .getSingleOrNull();
+    final base = data.copyWith(questionId: Value(questionId));
+    if (existing == null) {
+      await into(aiUnderstandings).insert(base);
+    } else {
+      await (update(aiUnderstandings)..where((t) => t.id.equals(existing.id)))
+          .write(base);
+    }
+  }
+
+  // --- AiMistake (每 Question 单条，upsert) ---
+
+  Stream<AiMistake?> watchMistake(int questionId) =>
+      (select(aiMistakes)..where((t) => t.questionId.equals(questionId)))
+          .watchSingleOrNull();
+
+  Future<void> upsertMistake(int questionId, AiMistakesCompanion data) async {
+    final existing =
+        await (select(aiMistakes)..where((t) => t.questionId.equals(questionId)))
+            .getSingleOrNull();
+    final base = data.copyWith(questionId: Value(questionId));
+    if (existing == null) {
+      await into(aiMistakes).insert(base);
+    } else {
+      await (update(aiMistakes)..where((t) => t.id.equals(existing.id)))
+          .write(base);
+    }
+  }
+
+  // --- GeneratedExercise ---
+
+  Stream<List<GeneratedExercise>> watchGeneratedOfQuestion(int questionId) =>
+      (select(generatedExercises)
+            ..where((t) => t.sourceQuestionId.equals(questionId))
+            ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
+          .watch();
+
+  Future<int> insertGeneratedExercise({
+    required int sourceQuestionId,
+    required String difficulty,
+    required String contentJson,
+  }) =>
+      into(generatedExercises).insert(GeneratedExercisesCompanion.insert(
+        sourceQuestionId: sourceQuestionId,
+        difficulty: difficulty,
+        contentJson: contentJson,
+      ));
+
+  Future<void> deleteGeneratedExercise(int id) =>
+      (delete(generatedExercises)..where((t) => t.id.equals(id))).go();
+
+  // --- PrintItem ---
+
+  Stream<List<PrintItem>> watchPrintItems() {
+    final query = select(printItems)
+      ..orderBy([(t) => OrderingTerm.asc(t.order)]);
+    return query.watch();
+  }
+
+  Future<List<PrintItem>> listPrintItems() {
+    final query = select(printItems)
+      ..orderBy([(t) => OrderingTerm.asc(t.order)]);
+    return query.get();
+  }
+
+  Future<void> updatePrintItem(int id, PrintItemsCompanion companion) =>
+      (update(printItems)..where((t) => t.id.equals(id))).write(companion);
+
+  Future<void> deletePrintItem(int id) =>
+      (delete(printItems)..where((t) => t.id.equals(id))).go();
+
+  /// 整体重排打印项 order（0..n-1）。
+  Future<void> reorderPrintItems(List<int> ids) async {
+    await transaction(() async {
+      for (var i = 0; i < ids.length; i++) {
+        await (update(printItems)..where((t) => t.id.equals(ids[i])))
+            .write(PrintItemsCompanion(order: Value(i)));
+      }
+    });
+  }
+
+  /// 追加到打印列表末尾（order=当前最大+1）。
+  Future<int> appendPrintItem(PrintItemsCompanion data) async {
+    final rows = await (select(printItems)).get();
+    var maxOrder = -1;
+    for (final r in rows) {
+      if (r.order > maxOrder) maxOrder = r.order;
+    }
+    final base = data.copyWith(order: Value(maxOrder + 1));
+    return into(printItems).insert(base);
+  }
+
+  /// 该 question/exercise 是否已在打印列表。
+  Future<bool> printItemExists({int? questionId, int? exerciseId}) async {
+    final q = select(printItems);
+    if (questionId != null) {
+      q.where((t) => t.questionId.equals(questionId));
+    } else if (exerciseId != null) {
+      q.where((t) => t.exerciseId.equals(exerciseId));
+    } else {
+      return false;
+    }
+    final rows = await q.get();
+    return rows.isNotEmpty;
+  }
 
   // --- Helpers ---
 

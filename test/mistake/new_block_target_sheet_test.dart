@@ -9,6 +9,8 @@ Question _existingQuestion(int id, String number) => Question(
       originalQuestionNumber: number,
       title: null,
       knowledgePoint: null,
+      questionType: null,
+      difficulty: null,
       tags: '[]',
       note: null,
       createdAt: DateTime(2026, 1, 1),

@@ -50,6 +50,10 @@ class Questions extends Table {
   TextColumn get originalQuestionNumber => text().nullable()();
   TextColumn get title => text().nullable()();
   TextColumn get knowledgePoint => text().nullable()();
+  /// 题型，如：选择题/填空题/解答题/其他。
+  TextColumn get questionType => text().nullable()();
+  /// 难度：基础/中等/困难（本地保存，来源可为手动或 AI）。
+  TextColumn get difficulty => text().nullable()();
   /// JSON 字符串数组，例如 '["二次函数","易错"]'。
   TextColumn get tags => text().withDefault(const Constant('[]'))();
   TextColumn get note => text().nullable()();
@@ -136,4 +140,120 @@ const List<String> kAnswerSourceTypes = <String>[
   'screenshot',
   'teacher',
   'other',
+];
+
+/// Block 图片版本方法。
+const List<String> kImageVersions = <String>[
+  'original',
+  'traditional',
+  'aiMaskLocal',
+  'aiEdit',
+  'manual',
+];
+
+/// 一张 Block 的派生图片版本（原图永远保留在 Page/block 原始路径中）。
+@DataClassName('BlockVersion')
+class BlockVersions extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get blockId =>
+      integer().references(Blocks, #id, onDelete: KeyAction.cascade)();
+  /// original / traditional / aiMaskLocal / aiEdit / manual
+  TextColumn get method => text()();
+  TextColumn get sourceImagePath => text().nullable()();
+  TextColumn get processedImagePath => text().nullable()();
+  TextColumn get maskPath => text().nullable()();
+  TextColumn get model => text().nullable()();
+  BoolColumn get verified => boolean().withDefault(const Constant(false))();
+  BoolColumn get useForPrint => boolean().withDefault(const Constant(false))();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+}
+
+/// AI 识题结果（每 Question 至多一条；可手动编辑覆盖）。
+@DataClassName('AiUnderstanding')
+class AiUnderstandings extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get questionId =>
+      integer().references(Questions, #id, onDelete: KeyAction.cascade)();
+  /// none / ok / error
+  TextColumn get status => text().withDefault(const Constant('none'))();
+  TextColumn get questionType => text().nullable()();
+  TextColumn get knowledgePoint => text().nullable()();
+  TextColumn get difficulty => text().nullable()();
+  TextColumn get summary => text().nullable()();
+  TextColumn get answer => text().nullable()();
+  TextColumn get solution => text().nullable()();
+  TextColumn get approach => text().nullable()();
+  TextColumn get rawJson => text().nullable()();
+  TextColumn get model => text().nullable()();
+  TextColumn get error => text().nullable()();
+  DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
+}
+
+/// AI 错因分析（每 Question 至多一条；可手动编辑覆盖）。
+@DataClassName('AiMistake')
+class AiMistakes extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get questionId =>
+      integer().references(Questions, #id, onDelete: KeyAction.cascade)();
+  /// none / ok / error
+  TextColumn get status => text().withDefault(const Constant('none'))();
+  TextColumn get errorType => text().nullable()();
+  TextColumn get errorStep => text().nullable()();
+  TextColumn get reason => text().nullable()();
+  TextColumn get reviewSuggestion => text().nullable()();
+  TextColumn get rawJson => text().nullable()();
+  TextColumn get model => text().nullable()();
+  TextColumn get error => text().nullable()();
+  DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
+}
+
+/// AI 举一反三生成题（保存到本地，可加入打印）。
+@DataClassName('GeneratedExercise')
+class GeneratedExercises extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get sourceQuestionId =>
+      integer().references(Questions, #id, onDelete: KeyAction.cascade)();
+  /// easy / same / hard（对应 基础/同等/提高）
+  TextColumn get difficulty => text()();
+  /// JSON: {question, answer, solution, knowledgePoint, difficulty, variation}
+  TextColumn get contentJson => text()();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+}
+
+/// 一次打印会话中的一道题（Question 或 AI 生成题）。
+@DataClassName('PrintItem')
+class PrintItems extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  /// question / exercise
+  TextColumn get kind => text().withDefault(const Constant('question'))();
+  IntColumn get questionId => integer().nullable()();
+  IntColumn get exerciseId => integer().nullable()();
+  IntColumn get order => integer().withDefault(const Constant(0))();
+  IntColumn get answerSpaceMm => integer().withDefault(const Constant(40))();
+  BoolColumn get forcePageBreakBefore =>
+      boolean().withDefault(const Constant(false))();
+  RealColumn get scaleOverride => real().nullable()();
+  BoolColumn get showSource => boolean().withDefault(const Constant(true))();
+  BoolColumn get showOriginalNumber =>
+      boolean().withDefault(const Constant(true))();
+  BoolColumn get showAnswer => boolean().withDefault(const Constant(false))();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+}
+
+/// AI 错因类型（简单枚举）。
+const List<String> kErrorTypes = <String>[
+  'calculation',
+  'concept',
+  'sign',
+  'reading',
+  'formula',
+  'careless',
+  'unknown',
+];
+
+/// 举一反三难度标签。
+const List<String> kExerciseDifficulties = <String>[
+  'easy',
+  'same',
+  'hard',
 ];

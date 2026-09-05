@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:math' as math;
+import 'dart:typed_data';
 
 import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
@@ -47,6 +48,21 @@ class MistakeImageStore {
     final ext = _extOf(source.path);
     final dest = p.join(originals.path, '${const Uuid().v4()}$ext');
     await source.copy(dest);
+    return dest;
+  }
+
+  /// 保存派生文件（processed/masks/answers/generated）到 papers/<paperId>/<sub>。
+  Future<String> saveDerived(
+    int paperId,
+    Uint8List bytes,
+    String subfolder,
+    String ext,
+  ) async {
+    final dir = await _paperDirectory(paperId);
+    final sub = Directory(p.join(dir.path, subfolder));
+    await sub.create(recursive: true);
+    final dest = p.join(sub.path, '${const Uuid().v4()}.$ext');
+    await File(dest).writeAsBytes(bytes, flush: true);
     return dest;
   }
 
