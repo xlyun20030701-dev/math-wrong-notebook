@@ -84,7 +84,7 @@ void main() {
       }
     }
     final rezip = p.join(extracted.path, 'high.zip');
-    await File(rezip).writeAsBytes(ZipEncoder().encode(archive)!);
+    await File(rezip).writeAsBytes(ZipEncoder().encode(archive));
 
     await expectLater(svc.stageRestore(rezip), throwsA(isA<BackupError>()));
     await extracted.delete(recursive: true);

@@ -82,7 +82,6 @@ class BackupService {
     }
 
     final bytes = ZipEncoder().encode(archive);
-    if (bytes == null) throw BackupError('压缩失败');
     await File(dest).writeAsBytes(bytes, flush: true);
     return dest;
   }
@@ -97,7 +96,6 @@ class BackupService {
     if (!await zipFile.exists()) throw BackupError('备份文件不存在');
     final bytes = await zipFile.readAsBytes();
     final archive = ZipDecoder().decodeBytes(bytes);
-    if (archive == null) throw BackupError('不是有效的 ZIP 备份');
 
     final dir = await Directory.systemTemp.createTemp('bk_restore');
     try {
