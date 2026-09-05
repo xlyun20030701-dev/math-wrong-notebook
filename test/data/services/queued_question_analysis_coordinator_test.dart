@@ -201,12 +201,12 @@ void main() {
       taskSpec: rootTask,
       route: route.resolve(rootTask, promptVersion: 'analysis-v1'),
       payloadJson: jsonEncode(<String, dynamic>{'question': source.toJson()}),
-      createdAt: DateTime(2026, 8, 5),
+      createdAt: DateTime.now().subtract(const Duration(hours: 1)),
     ).copyWith(
       status: AnalysisJobStatus.completed,
       attemptCount: 1,
       resultJson: jsonEncode(source.toJson()),
-      completedAt: DateTime(2026, 8, 5),
+      completedAt: DateTime.now().subtract(const Duration(hours: 1)),
     );
     await repository.enqueue(rootJob);
 

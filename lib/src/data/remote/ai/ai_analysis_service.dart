@@ -1,3 +1,4 @@
+// ignore_for_file: unawaited_return_in_try_block
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;

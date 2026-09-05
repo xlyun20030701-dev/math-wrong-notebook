@@ -1,3 +1,4 @@
+// ignore_for_file: unawaited_return_in_try_block
 import 'dart:convert';
 
 import 'package:smart_wrong_notebook/src/data/remote/ai/ai_analysis_service.dart';

@@ -4082,8 +4082,8 @@ final class $$QuestionRecordsTableReferences extends BaseReferences<
   static MultiTypedResultKey<$GeneratedExercisesTable, List<GeneratedExercise>>
       _generatedExercisesRefsTable(_$AppDatabase db) =>
           MultiTypedResultKey.fromTable(db.generatedExercises,
-              aliasName: $_aliasNameGenerator(
-                  db.questionRecords.id, db.generatedExercises.questionId));
+              aliasName:
+                  'question_records__id__generated_exercises__question_id');
 
   $$GeneratedExercisesTableProcessedTableManager get generatedExercisesRefs {
     final manager = $$GeneratedExercisesTableTableManager(
@@ -4099,8 +4099,7 @@ final class $$QuestionRecordsTableReferences extends BaseReferences<
   static MultiTypedResultKey<$ReviewLogsTable, List<ReviewLog>>
       _reviewLogsRefsTable(_$AppDatabase db) =>
           MultiTypedResultKey.fromTable(db.reviewLogs,
-              aliasName: $_aliasNameGenerator(
-                  db.questionRecords.id, db.reviewLogs.questionId));
+              aliasName: 'question_records__id__review_logs__question_id');
 
   $$ReviewLogsTableProcessedTableManager get reviewLogsRefs {
     final manager = $$ReviewLogsTableTableManager($_db, $_db.reviewLogs)
@@ -4115,8 +4114,8 @@ final class $$QuestionRecordsTableReferences extends BaseReferences<
       List<AiConversationMessage>> _aiConversationMessagesRefsTable(
           _$AppDatabase db) =>
       MultiTypedResultKey.fromTable(db.aiConversationMessages,
-          aliasName: $_aliasNameGenerator(
-              db.questionRecords.id, db.aiConversationMessages.questionId));
+          aliasName:
+              'question_records__id__ai_conversation_messages__question_id');
 
   $$AiConversationMessagesTableProcessedTableManager
       get aiConversationMessagesRefs {
@@ -4594,7 +4593,7 @@ class $$QuestionRecordsTableTableManager extends RootTableManager<
           ),
           withReferenceMapper: (p0) => p0
               .map((e) => (
-                    e.readTable(table),
+                    e.readTable<$QuestionRecordsTable, QuestionRecord>(table),
                     $$QuestionRecordsTableReferences(db, table, e)
                   ))
               .toList(),
@@ -4721,9 +4720,9 @@ final class $$GeneratedExercisesTableReferences extends BaseReferences<
   $$GeneratedExercisesTableReferences(
       super.$_db, super.$_table, super.$_typedResult);
 
-  static $QuestionRecordsTable _questionIdTable(_$AppDatabase db) =>
-      db.questionRecords.createAlias($_aliasNameGenerator(
-          db.generatedExercises.questionId, db.questionRecords.id));
+  static $QuestionRecordsTable _questionIdTable(_$AppDatabase db) => db
+      .questionRecords
+      .createAlias('generated_exercises__question_id__question_records__id');
 
   $$QuestionRecordsTableProcessedTableManager get questionId {
     final $_column = $_itemColumn<String>('question_id')!;
@@ -5085,7 +5084,8 @@ class $$GeneratedExercisesTableTableManager extends RootTableManager<
           ),
           withReferenceMapper: (p0) => p0
               .map((e) => (
-                    e.readTable(table),
+                    e.readTable<$GeneratedExercisesTable, GeneratedExercise>(
+                        table),
                     $$GeneratedExercisesTableReferences(db, table, e)
                   ))
               .toList(),
@@ -5162,8 +5162,8 @@ final class $$ReviewLogsTableReferences
   $$ReviewLogsTableReferences(super.$_db, super.$_table, super.$_typedResult);
 
   static $QuestionRecordsTable _questionIdTable(_$AppDatabase db) =>
-      db.questionRecords.createAlias($_aliasNameGenerator(
-          db.reviewLogs.questionId, db.questionRecords.id));
+      db.questionRecords
+          .createAlias('review_logs__question_id__question_records__id');
 
   $$QuestionRecordsTableProcessedTableManager get questionId {
     final $_column = $_itemColumn<String>('question_id')!;
@@ -5371,7 +5371,7 @@ class $$ReviewLogsTableTableManager extends RootTableManager<
           ),
           withReferenceMapper: (p0) => p0
               .map((e) => (
-                    e.readTable(table),
+                    e.readTable<$ReviewLogsTable, ReviewLog>(table),
                     $$ReviewLogsTableReferences(db, table, e)
                   ))
               .toList(),
@@ -5548,7 +5548,11 @@ class $$SettingsEntriesTableTableManager extends RootTableManager<
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map((e) => (
+                    e.readTable<$SettingsEntriesTable, SettingsEntry>(table),
+                    BaseReferences<_$AppDatabase, $SettingsEntriesTable,
+                        SettingsEntry>(db, table, e)
+                  ))
               .toList(),
           prefetchHooksCallback: null,
         ));
@@ -5594,8 +5598,8 @@ final class $$AiConversationMessagesTableReferences extends BaseReferences<
       super.$_db, super.$_table, super.$_typedResult);
 
   static $QuestionRecordsTable _questionIdTable(_$AppDatabase db) =>
-      db.questionRecords.createAlias($_aliasNameGenerator(
-          db.aiConversationMessages.questionId, db.questionRecords.id));
+      db.questionRecords.createAlias(
+          'ai_conversation_messages__question_id__question_records__id');
 
   $$QuestionRecordsTableProcessedTableManager get questionId {
     final $_column = $_itemColumn<String>('question_id')!;
@@ -5796,7 +5800,8 @@ class $$AiConversationMessagesTableTableManager extends RootTableManager<
           ),
           withReferenceMapper: (p0) => p0
               .map((e) => (
-                    e.readTable(table),
+                    e.readTable<$AiConversationMessagesTable,
+                        AiConversationMessage>(table),
                     $$AiConversationMessagesTableReferences(db, table, e)
                   ))
               .toList(),
@@ -6375,7 +6380,11 @@ class $$AnalysisJobsTableTableManager extends RootTableManager<
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map((e) => (
+                    e.readTable<$AnalysisJobsTable, AnalysisJob>(table),
+                    BaseReferences<_$AppDatabase, $AnalysisJobsTable,
+                        AnalysisJob>(db, table, e)
+                  ))
               .toList(),
           prefetchHooksCallback: null,
         ));
