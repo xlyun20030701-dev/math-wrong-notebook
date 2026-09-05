@@ -303,105 +303,26 @@ class _BlockSelectScreenState extends ConsumerState<BlockSelectScreen> {
     return baked;
   }
 
-  Future<_BlockTarget?> _pickTarget(List<Question> basket) async {
-    return showModalBottomSheet<_BlockTarget>(
+  /// 弹出“加入错题”选择面板。
+  ///
+  /// 面板使用独立 [State] 的 [NewBlockTargetSheet] 保存“新建错题”中间状态，
+  /// 避免键盘弹出 / 焦点 / MediaQuery 变化触发 modal route 重建时，
+  /// 把 createMode 与输入内容重置回初始状态（旧实现导致点输入框即退出新建）。
+  Future<BlockTargetSelection?> _pickTarget(List<Question> basket) async {
+    final counts = <int, int>{};
+    for (final q in basket) {
+      counts[q.id] =
+          ref.read(watchBlocksOfQuestionProvider(q.id)).value?.length ?? 0;
+    }
+    return showModalBottomSheet<BlockTargetSelection>(
       context: context,
       isScrollControlled: true,
-      builder: (context) {
-        final number = TextEditingController();
-        final title = TextEditingController();
-        var createMode = false;
-        return StatefulBuilder(
-          builder: (context, setSheetState) => Padding(
-            padding: EdgeInsets.only(
-                left: 16,
-                right: 16,
-                top: 16,
-                bottom: MediaQuery.of(context).viewInsets.bottom + 16),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text('加入错题 · ${blockTypeLabels[_blockType] ?? _blockType}',
-                      style: const TextStyle(fontSize: 18)),
-                  const SizedBox(height: 8),
-                  if (!createMode)
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: <Widget>[
-                        for (final q in basket)
-                          ActionChip(
-                            label: Text(
-                                '${questionDisplayLabel(q)}（${_blockCount(q.id)}）'),
-                            onPressed: () => Navigator.pop(context,
-                                _BlockTarget(q.id, _blockType, null)),
-                          ),
-                        ActionChip(
-                          avatar: const Icon(CupertinoIcons.add, size: 16),
-                          label: const Text('新建错题'),
-                          onPressed: () =>
-                              setSheetState(() => createMode = true),
-                        ),
-                        if (basket.isEmpty)
-                          const Padding(
-                            padding: EdgeInsets.symmetric(vertical: 4),
-                            child: Text('本卷还没有错题，请新建。'),
-                          ),
-                      ],
-                    )
-                  else
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: <Widget>[
-                        TextField(
-                          controller: number,
-                          keyboardType: TextInputType.number,
-                          decoration:
-                              const InputDecoration(labelText: '原题号（如 3、7、11）'),
-                        ),
-                        TextField(
-                          controller: title,
-                          decoration: const InputDecoration(labelText: '题干简述（可选）'),
-                        ),
-                        const SizedBox(height: 12),
-                        FilledButton(
-                          onPressed: () {
-                            final numberText = number.text.trim();
-                            final titleText = title.text.trim();
-                            if (numberText.isEmpty && titleText.isEmpty) {
-                              return;
-                            }
-                            Navigator.pop(
-                                context,
-                                _BlockTarget(
-                                    null,
-                                    _blockType,
-                                    NewQuestionInput(
-                                        number:
-                                            numberText.isEmpty ? null : numberText,
-                                        title: titleText.isEmpty ? null : titleText)));
-                          },
-                          child: const Text('创建并保存'),
-                        ),
-                      ],
-                    ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
+      builder: (context) => NewBlockTargetSheet(
+        blockType: _blockType,
+        basket: basket,
+        blockCounts: counts,
+      ),
     );
-  }
-
-  int _blockCount(int questionId) {
-    return ref
-            .read(watchBlocksOfQuestionProvider(questionId))
-            .value
-            ?.length ??
-        0;
   }
 }
 
@@ -411,13 +332,143 @@ class NewQuestionInput {
   final String? title;
 }
 
-class _BlockTarget {
-  const _BlockTarget(this.existingQuestionId, this.blockType, this.newQuestion);
+class BlockTargetSelection {
+  const BlockTargetSelection({
+    this.existingQuestionId,
+    required this.blockType,
+    this.newQuestion,
+  });
+
+  /// 为 null 且 [newQuestion] 非空时表示“新建错题”。
   final int? existingQuestionId;
   final String blockType;
   final NewQuestionInput? newQuestion;
 
   bool get isNew => newQuestion != null;
+}
+
+/// “加入错题”底部面板：选择已有错题，或进入“新建错题”填写题号/标题。
+///
+/// createMode 与两个 [TextEditingController] 保存在独立的 [State] 中，
+/// 键盘弹出或焦点 / MediaQuery.viewInsets 变化导致 route 重建时不会丢失状态。
+class NewBlockTargetSheet extends StatefulWidget {
+  const NewBlockTargetSheet({
+    required this.blockType,
+    required this.basket,
+    required this.blockCounts,
+    super.key,
+  });
+
+  final String blockType;
+  final List<Question> basket;
+  final Map<int, int> blockCounts;
+
+  @override
+  State<NewBlockTargetSheet> createState() => _NewBlockTargetSheetState();
+}
+
+class _NewBlockTargetSheetState extends State<NewBlockTargetSheet> {
+  final TextEditingController _number = TextEditingController();
+  final TextEditingController _title = TextEditingController();
+  bool _createMode = false;
+
+  @override
+  void dispose() {
+    _number.dispose();
+    _title.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 16,
+        right: 16,
+        top: 16,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+      ),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text(
+              '加入错题 · ${blockTypeLabels[widget.blockType] ?? widget.blockType}',
+              style: const TextStyle(fontSize: 18),
+            ),
+            const SizedBox(height: 8),
+            if (!_createMode)
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: <Widget>[
+                  for (final q in widget.basket)
+                    ActionChip(
+                      label: Text(
+                          '${questionDisplayLabel(q)}（${widget.blockCounts[q.id] ?? 0}）'),
+                      onPressed: () => Navigator.pop(
+                        context,
+                        BlockTargetSelection(
+                          existingQuestionId: q.id,
+                          blockType: widget.blockType,
+                        ),
+                      ),
+                    ),
+                  ActionChip(
+                    avatar: const Icon(CupertinoIcons.add, size: 16),
+                    label: const Text('新建错题'),
+                    onPressed: () => setState(() => _createMode = true),
+                  ),
+                  if (widget.basket.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 4),
+                      child: Text('本卷还没有错题，请新建。'),
+                    ),
+                ],
+              )
+            else
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                  TextField(
+                    controller: _number,
+                    keyboardType: TextInputType.number,
+                    decoration:
+                        const InputDecoration(labelText: '原题号（如 3、7、11）'),
+                  ),
+                  TextField(
+                    controller: _title,
+                    decoration: const InputDecoration(labelText: '题干简述（可选）'),
+                  ),
+                  const SizedBox(height: 12),
+                  FilledButton(
+                    onPressed: () {
+                      final numberText = _number.text.trim();
+                      final titleText = _title.text.trim();
+                      if (numberText.isEmpty && titleText.isEmpty) {
+                        return;
+                      }
+                      Navigator.pop(
+                        context,
+                        BlockTargetSelection(
+                          blockType: widget.blockType,
+                          newQuestion: NewQuestionInput(
+                            number: numberText.isEmpty ? null : numberText,
+                            title: titleText.isEmpty ? null : titleText,
+                          ),
+                        ),
+                      );
+                    },
+                    child: const Text('创建并保存'),
+                  ),
+                ],
+              ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _SelectionPainter extends CustomPainter {

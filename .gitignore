@@ -18,6 +18,10 @@ pubspec.lock
 *.swp
 .DS_Store
 
+# Android/Kotlin generated
+android/.kotlin/
+.kotlin/
+
 # Local tooling and transient diagnostics
 .vercel/
 codex-patches/
