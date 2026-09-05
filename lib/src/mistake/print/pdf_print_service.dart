@@ -3,9 +3,32 @@ import 'dart:typed_data';
 
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:smart_wrong_notebook/src/mistake/print/layout_engine.dart';
+import 'package:smart_wrong_notebook/src/mistake/print/layout_engine.dart';const double _ptPerMm = 72 / 25.4;
 
-const double _ptPerMm = 72 / 25.4;
+pw.Font? _cachedCjkFont;
+
+/// 在 Android 设备上查找系统 CJK 字体并加载（个人打印中文标题/答案用）。
+Future<pw.Font?> loadDeviceCjkFont() async {
+  if (_cachedCjkFont != null) return _cachedCjkFont;
+  const candidates = <String>[
+    '/system/fonts/NotoSansSC-Regular.otf',
+    '/system/fonts/DroidSansFallback.ttf',
+    '/system/fonts/NotoSansCJK-Regular.ttc',
+  ];
+  for (final path in candidates) {
+    try {
+      final file = File(path);
+      if (!await file.exists()) continue;
+      final bytes = await file.readAsBytes();
+      final font = pw.Font.ttf(ByteData.sublistView(bytes));
+      _cachedCjkFont = font;
+      return font;
+    } catch (_) {
+      // 尝试下一个候选
+    }
+  }
+  return null;
+}
 
 /// A4 PDF 导出：与 [PrintLayoutEngine] 共用分页结果。
 class PdfPrintService {
@@ -17,6 +40,7 @@ class PdfPrintService {
   Future<Uint8List> build({
     required List<A4PageLayout> pages,
     LayoutOptions options = const LayoutOptions(),
+    pw.Font? font,
   }) async {
     // 先统一读取图片字节，避免在 widget 树中使用 FutureBuilder。
     final images = <String, Uint8List>{};
@@ -37,7 +61,9 @@ class PdfPrintService {
       }
     }
 
-    final doc = pw.Document();
+    final doc = font == null
+        ? pw.Document()
+        : pw.Document(theme: pw.ThemeData.withFont(base: font));
     final pageFormat = PdfPageFormat(
       options.pageWidthMm * _ptPerMm,
       options.pageHeightMm * _ptPerMm,

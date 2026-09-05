@@ -9,6 +9,7 @@ import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:smart_wrong_notebook/src/mistake/db/mistake_database.dart';
 import 'package:smart_wrong_notebook/src/mistake/print/layout_engine.dart';
+import 'package:smart_wrong_notebook/src/mistake/print/pdf_print_service.dart';
 import 'package:smart_wrong_notebook/src/mistake/print/print_loader.dart';
 import 'package:smart_wrong_notebook/src/mistake/providers.dart';
 import 'package:smart_wrong_notebook/src/mistake/widgets/a4_preview.dart';
@@ -233,7 +234,7 @@ class _PrintListScreenState extends ConsumerState<PrintListScreen> {
       final built = await _build();
       final pdf = await ref.read(pdfPrintServiceProvider).build(
             pages: built.$1,
-            options: built.$2,
+            options: built.$2, font: await loadDeviceCjkFont(),
           );
       if (!mounted) return;
       final tmp = File(
@@ -273,4 +274,5 @@ class _PrintListScreenState extends ConsumerState<PrintListScreen> {
     }
   }
 }
+
 
