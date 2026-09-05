@@ -1,3 +1,4 @@
+// ignore_for_file: use_build_context_synchronously
 import 'dart:io';
 
 import 'package:flutter/cupertino.dart';
@@ -100,11 +101,16 @@ class _CleanBlockScreenState extends ConsumerState<CleanBlockScreen> {
                 label: const Text('手动橡皮擦'),
               ),
               OutlinedButton.icon(
+                onPressed: _busy ? null : () => _aiClean(block),
+                icon: const Icon(CupertinoIcons.sparkles),
+                label: const Text('AI 识别+本地擦除'),
+              ),
+              OutlinedButton.icon(
                 onPressed: () => _note(
-                    'AI 识别手写区域 + 本地擦除 与 AI 重绘净化需要视觉模型返回掩码/编辑图，'
-                    '将在验证后接线；原图永久保留。'),
+                    'AI 重绘净化（实验）需要图像编辑能力返回整张重绘图，'
+                    '且必须核对数字/公式/图形后才能使用；尚未接线。'),
                 icon: const Icon(CupertinoIcons.info_circle),
-                label: const Text('AI 去手写（待接线）'),
+                label: const Text('AI 重绘（待接线）'),
               ),
             ],
           ),
@@ -184,5 +190,41 @@ class _CleanBlockScreenState extends ConsumerState<CleanBlockScreen> {
     if (!mounted) return;
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text(msg)));
+  }
+
+  Future<void> _aiClean(Block block) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('AI 识别+本地擦除'),
+        content: const Text('将调用 OpenAI API 定位手写/批注区域，再由本地算法清理。'
+            '原图永久保留，结果需人工核对后再设为打印图。是否继续？'),
+        actions: <Widget>[
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('取消')),
+          FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('继续')),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    setState(() => _busy = true);
+    try {
+      final regions =
+          await ref.read(aiActionsProvider).detectHandwriting(block.id);
+      await _svc.cleanWithRegions(block.id, regions);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('已生成 ${regions.length} 个区域的清理版本，请人工核对')));
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('失败：$e')));
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 }

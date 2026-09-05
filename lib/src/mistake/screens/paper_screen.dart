@@ -9,6 +9,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:smart_wrong_notebook/src/mistake/db/mistake_database.dart';
 import 'package:smart_wrong_notebook/src/mistake/labels.dart';
 import 'package:smart_wrong_notebook/src/mistake/providers.dart';
+import 'package:smart_wrong_notebook/src/mistake/screens/page_ai_select_screen.dart';
 import 'package:smart_wrong_notebook/src/mistake/services/image_quality.dart';
 
 /// 单张试卷页：页浏览、照片导入、错题篮。
@@ -58,10 +59,31 @@ class _PaperScreenState extends ConsumerState<PaperScreen> {
           ),
           floatingActionButton: current == null
               ? null
-              : FloatingActionButton.extended(
-                  onPressed: () => _openBlockSelect(current),
-                  icon: const Icon(CupertinoIcons.crop),
-                  label: const Text('框选错题'),
+              : Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: <Widget>[
+                    FloatingActionButton.extended(
+                      heroTag: 'ai_detect',
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => PageAiSelectScreen(
+                            pageId: current.id,
+                            paperId: widget.paperId,
+                          ),
+                        ),
+                      ),
+                      icon: const Icon(CupertinoIcons.sparkles),
+                      label: const Text('AI 框题'),
+                    ),
+                    const SizedBox(height: 12),
+                    FloatingActionButton.extended(
+                      heroTag: 'manual_crop',
+                      onPressed: () => _openBlockSelect(current),
+                      icon: const Icon(CupertinoIcons.crop),
+                      label: const Text('框选错题'),
+                    ),
+                  ],
                 ),
           body: Column(
             children: <Widget>[

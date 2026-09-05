@@ -43,7 +43,16 @@ class _NotebookScreenState extends ConsumerState<NotebookScreen> {
     };
 
     return Scaffold(
-      appBar: AppBar(title: const Text('错题本')),
+      appBar: AppBar(
+        title: const Text('错题本'),
+        actions: <Widget>[
+          IconButton(
+            tooltip: '统计',
+            icon: const Icon(CupertinoIcons.chart_bar),
+            onPressed: _showStats,
+          ),
+        ],
+      ),
       body: Column(
         children: <Widget>[
           Padding(
@@ -132,6 +141,91 @@ class _NotebookScreenState extends ConsumerState<NotebookScreen> {
           ?.length ??
       0;
 
+  Future<void> _showStats() async {
+    final db = ref.read(mistakeDbProvider);
+    final qs = ref.read(watchAllQuestionsProvider).value ?? const <Question>[];
+    final kpCount = <String, int>{};
+    final typeCount = <String, int>{};
+    for (final q in qs) {
+      final kp = q.knowledgePoint;
+      if (kp != null && kp.isNotEmpty) {
+        kpCount[kp] = (kpCount[kp] ?? 0) + 1;
+      }
+      final qt = q.questionType;
+      if (qt != null && qt.isNotEmpty) {
+        typeCount[qt] = (typeCount[qt] ?? 0) + 1;
+      }
+    }
+    final mistakes = await (db.select(db.aiMistakes)).get();
+    final errorCount = <String, int>{};
+    for (final m in mistakes) {
+      if (m.status != 'ok' || m.errorType == null) continue;
+      errorCount[m.errorType!] = (errorCount[m.errorType] ?? 0) + 1;
+    }
+    if (!mounted) return;
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('统计'),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              _group('知识点', kpCount),
+              const SizedBox(height: 8),
+              _group('题型', typeCount),
+              const SizedBox(height: 8),
+              _group('错因', errorCount,
+                  labelMap: const <String, String>{
+                    'calculation': '计算',
+                    'concept': '概念',
+                    'sign': '符号',
+                    'reading': '审题',
+                    'formula': '公式',
+                    'careless': '粗心',
+                    'unknown': '待确认',
+                  }),
+            ],
+          ),
+        ),
+        actions: <Widget>[
+          TextButton(
+              onPressed: () => Navigator.pop(context), child: const Text('关闭')),
+        ],
+      ),
+    );
+  }
+
+  Widget _group(String title, Map<String, int> counts,
+      {Map<String, String>? labelMap}) {
+    final entries = counts.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    if (entries.isEmpty) {
+      return Text('$title：暂无');
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+        const SizedBox(height: 4),
+        Wrap(
+          spacing: 6,
+          runSpacing: 4,
+          children: <Widget>[
+            for (final e in entries.take(12))
+              Chip(
+                visualDensity: VisualDensity.compact,
+                label: Text(
+                    '${labelMap?[e.key] ?? e.key} ${e.value}',
+                    style: const TextStyle(fontSize: 12)),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+
   Future<void> _addSelectedToPrint() async {
     final db = ref.read(mistakeDbProvider);
     var added = 0;
@@ -152,3 +246,4 @@ class _NotebookScreenState extends ConsumerState<NotebookScreen> {
     );
   }
 }
+

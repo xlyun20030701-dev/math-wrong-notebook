@@ -147,6 +147,43 @@ class AiActions {
     const user = '请框出页面上每一道题（题干+选项+图形区域）。'
         '同时如果发现疑似错题（有红叉、扣分、批注、明显订正），在题号后加前缀"疑似"，如"3疑似"。';
     final text = await _chat.chat(system: system, user: user, images: <Uint8List>[bytes]);
+    return _parseRegions(text);
+  }
+
+  /// AI 识别某 Block 图片上的手写/批注/污迹区域（归一化 [x,y,w,h]）。
+  ///
+  /// AI 只负责“定位”，不做任何像素改写；像素清理由本地算法完成。
+  Future<List<List<double>>> detectHandwriting(int blockId) async {
+    final block = await _db.blockById(blockId);
+    if (block == null) throw AiApiException('区块不存在。');
+    final path = block.processedImagePath;
+    if (path == null || !await File(path).exists()) {
+      throw AiApiException('区块没有可处理的图片，请先裁剪。');
+    }
+    final bytes = await File(path).readAsBytes();
+    const system = '你是数学试卷图片处理助手。请定位图片中「手写笔迹、红/蓝批注、涂改、污迹」区域。'
+        '只输出 JSON 对象：{"regions":[{"x":0~1,"y":0~1,"width":0~1,"height":0~1}]}。'
+        '不要框住印刷题目文字。只输出 JSON。';
+    const user = '框出需要清理的手写/批注/污迹区域。不要输出 JSON 以外内容。';
+    final text = await _chat.chat(system: system, user: user, images: <Uint8List>[bytes]);
+    final map = extractJsonMap(text);
+    if (map == null) throw AiApiException('AI 返回无法解析，请重试。');
+    final raw = map['regions'];
+    if (raw is! List) throw AiApiException('AI 未返回可清理区域。');
+    final result = <List<double>>[];
+    for (final r in raw) {
+      if (r is Map) {
+        final region = AiPageRegion.fromMap(Map<String, dynamic>.from(r));
+        if (region != null) {
+          result.add(<double>[region.x, region.y, region.width, region.height]);
+        }
+      }
+    }
+    if (result.isEmpty) throw AiApiException('未检测到需清理的区域。');
+    return result;
+  }
+
+  List<AiPageRegion> _parseRegions(String text) {
     final map = extractJsonMap(text);
     if (map == null) throw AiApiException('AI 返回无法解析，请重试。');
     final rawList = map['regions'];
