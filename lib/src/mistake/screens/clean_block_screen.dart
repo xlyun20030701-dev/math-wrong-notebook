@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:smart_wrong_notebook/src/mistake/cleaning/cleaning_service.dart';
 import 'package:smart_wrong_notebook/src/mistake/db/mistake_database.dart';
 import 'package:smart_wrong_notebook/src/mistake/providers.dart';
+import 'package:smart_wrong_notebook/src/mistake/screens/mask_editor_screen.dart';
 
 const Map<String, String> versionMethodLabels = <String, String>{
   'original': '原图',
@@ -88,6 +89,15 @@ class _CleanBlockScreenState extends ConsumerState<CleanBlockScreen> {
                 onPressed: _busy ? null : () => _clean(block),
                 icon: const Icon(CupertinoIcons.wand_stars),
                 label: const Text('基础清理'),
+              ),
+              OutlinedButton.icon(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => MaskEditorScreen(blockId: block.id),
+                  ),
+                ),
+                icon: const Icon(CupertinoIcons.paintbrush),
+                label: const Text('手动橡皮擦'),
               ),
               OutlinedButton.icon(
                 onPressed: () => _note(
