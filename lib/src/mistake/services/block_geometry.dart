@@ -66,3 +66,26 @@ bool isValidBlockRect(
   if (normalized.height < minSide) return false;
   return true;
 }
+
+/// 把「顺时针旋转 [turns] 个 90° 后」的帧内的归一化矩形，还原到未旋转原帧。
+///
+/// 归一化不依赖具体分辨率，turns 为 0 或 4 的整数倍时返回原矩形。
+Rect fromRotatedToOriginal(Rect r, int turns) {
+  var x = r.left;
+  var y = r.top;
+  var w = r.width;
+  var h = r.height;
+  final k = ((turns % 4) + 4) % 4;
+  for (var i = 0; i < k; i++) {
+    // 逆时针回退一档（与 bitmap_util 的顺时针旋转互为逆）。
+    final nx = y;
+    final ny = 1 - (x + w);
+    final nw = h;
+    final nh = w;
+    x = nx;
+    y = ny;
+    w = nw;
+    h = nh;
+  }
+  return Rect.fromLTWH(x, y, w, h);
+}

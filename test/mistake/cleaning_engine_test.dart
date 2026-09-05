@@ -11,7 +11,7 @@ import 'package:smart_wrong_notebook/src/mistake/storage/mistake_image_store.dar
 void main() {
   test('basicClean returns decodable image, keeps content, crops border',
       () async {
-    final engine = const CleaningEngine();
+    const engine = CleaningEngine();
     final image = img.Image(width: 400, height: 500);
     img.fill(image, color: img.ColorRgb8(242, 242, 242));
     // 中间画黑色笔画块
@@ -36,7 +36,7 @@ void main() {
   });
 
   test('suppressRegions whitens colored marks inside region', () async {
-    final engine = const CleaningEngine();
+    const engine = CleaningEngine();
     final image = img.Image(width: 200, height: 200);
     img.fill(image, color: img.ColorRgb8(245, 245, 245));
     for (var y = 70; y < 130; y++) {

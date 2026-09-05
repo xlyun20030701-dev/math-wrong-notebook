@@ -92,4 +92,38 @@ void main() {
       expect(isValidBlockRect(tiny), isFalse);
     });
   });
+
+  group('fromRotatedToOriginal', () {
+    test('k=0 或 4 为恒等', () {
+      const r = Rect.fromLTWH(0.2, 0.3, 0.4, 0.5);
+      final a = fromRotatedToOriginal(r, 0);
+      final b = fromRotatedToOriginal(r, 4);
+      expect(a.left, closeTo(0.2, epsilon));
+      expect(a.top, closeTo(0.3, epsilon));
+      expect(a.width, closeTo(0.4, epsilon));
+      expect(a.height, closeTo(0.5, epsilon));
+      expect(b.width, closeTo(0.4, epsilon));
+    });
+
+    test('旋转后左侧竖条 ⇔ 原图下半横条', () {
+      // 顺时针旋转 1 次后占据左侧竖条 => 原图底部横条
+      final orig = fromRotatedToOriginal(
+          const Rect.fromLTWH(0, 0, 0.5, 1.0), 1);
+      expect(orig.left, closeTo(0.0, epsilon));
+      expect(orig.top, closeTo(0.5, epsilon));
+      expect(orig.width, closeTo(1.0, epsilon));
+      expect(orig.height, closeTo(0.5, epsilon));
+    });
+
+    test('旋转 4 次往返回到原矩形', () {
+      const r = Rect.fromLTWH(0.1, 0.2, 0.3, 0.4);
+      final r1 = fromRotatedToOriginal(r, 1);
+      final r3 = fromRotatedToOriginal(r1, 3);
+      expect(r3.left, closeTo(0.1, epsilon));
+      expect(r3.top, closeTo(0.2, epsilon));
+      expect(r3.width, closeTo(0.3, epsilon));
+      expect(r3.height, closeTo(0.4, epsilon));
+    });
+  });
 }
+
